@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Story Viewer</title>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  background:#000;
+  font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial;
+  overflow:hidden;
+}
+
+/* BLUR BACKGROUND */
+.bg{
+  position:fixed;
+  inset:0;
+  background-size:cover;
+  background-position:center;
+  filter:blur(25px) brightness(0.6);
+  transform:scale(1.2);
+  z-index:0;
+}
+
+/* STORY IMAGE */
+.story{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:1;
+}
+
+.story img{
+  max-width:100%;
+  max-height:100%;
+  object-fit:contain;
+}
+
+/* PROGRESS BAR */
+.progress{
+  position:fixed;
+  top:10px;
+  left:10px;
+  right:10px;
+  display:flex;
+  gap:5px;
+  z-index:10;
+}
+
+.progress span{
+  flex:1;
+  height:3px;
+  background:rgba(255,255,255,.3);
+  overflow:hidden;
+}
+
+/* animasyonu sadece aktif bar'a uygulayacağız */
+.progress span.active::after{
+  content:"";
+  display:block;
+  height:100%;
+  width:0%;
+  background:#fff;
+  animation:fill 5s linear forwards;
+}
+
+@keyframes fill{
+  to{width:100%}
+}
+
+/* TAP AREAS */
+.tap{
+  position:fixed;
+  top:0;
+  bottom:0;
+  width:50%;
+  z-index:20;
+}
+.tap.left{left:0}
+.tap.right{right:0}
+</style>
+</head>
+
+<body>
+
+<div class="bg" id="bg"></div>
+
+<div class="progress" id="progress"></div>
+
+<div class="story">
+  <img id="storyImage" src="" alt="">
+</div>
+
+<div class="tap left"></div>
+<div class="tap right"></div>
+
+<script>
+/* =========================
+   IMAGE SETUP (SINIRSIZ)
+   ========================= */
+
+// Eğer resimler "images/" klasöründeyse burayı "images/" yap:
+const BASE_PATH = ""; // örn: "images/"
+
+// Denenecek uzantılar:
+const EXTENSIONS = ["jpg","jpeg","png","webp"];
+
+// Arada eksik dosya varsa hemen durmasın diye:
+// Örn story5 yok ama story6 var → bu sayede devam edebilir.
+// Çok büyük yapma, yoksa çok arar.
+const MAX_MISSES_IN_A_ROW = 3;
+
+// İstersen bir üst limit de koy (sınırsız gibi ama güvenlik):
+const HARD_LIMIT = 500;
+
+/* ========================= */
+
+const images = [];
+let detectIndex = 1;
+let misses = 0;
+
+let index = 0;
+let timer;
+
+const img = document.getElementById("storyImage");
+const bg  = document.getElementById("bg");
+const progress = document.getElementById("progress");
+
+function tryLoadOne(i, extIdx = 0){
+  if (i > HARD_LIMIT) {
+    startViewerOrError();
+    return;
+  }
+
+  if (extIdx >= EXTENSIONS.length) {
+    // bu index için hiçbir uzantı bulunamadı
+    misses++;
+    if (images.length === 0 && i === 1) {
+      // story1.* hiç yoksa direkt hata ver
+      startViewerOrError();
+      return;
+    }
+    // birkaç kaçırmadan sonra dur
+    if (misses >= MAX_MISSES_IN_A_ROW) {
+      startViewerOrError();
+      return;
+    }
+    // sonraki indexe geç
+    detectIndex++;
+    tryLoadOne(detectIndex, 0);
+    return;
+  }
+
+  const file = `${BASE_PATH}story${i}.${EXTENSIONS[extIdx]}`;
+  const test = new Image();
+
+  test.onload = () => {
+    images.push(file);
+    misses = 0;           // bulunduysa sıfırla
+    detectIndex++;
+    tryLoadOne(detectIndex, 0);
+  };
+
+  test.onerror = () => {
+    // aynı index için diğer uzantıyı dene
+    tryLoadOne(i, extIdx + 1);
+  };
+
+  test.src = file;
+}
+
+function startViewerOrError(){
+  if (images.length > 0) {
+    showStory(0);
+  } else {
+    alert(
+      "Resim bulunamadı!\n\n" +
+      "Kontrol et:\n" +
+      "1) story1.jpg / story1.jpeg / story1.png var mı?\n" +
+      "2) Resimler aynı klasörde mi? Değilse BASE_PATH'i ayarla.\n" +
+      "3) Sayfayı file:/// ile açıyorsan çalışmayabilir. Bir sunucudan aç (Live Server gibi)."
+    );
+  }
+}
+
+function renderProgress(){
+  progress.innerHTML = "";
+  images.forEach((_, i) => {
+    const bar = document.createElement("span");
+
+    // geçmiş barları tamamen doldur
+    if (i < index) {
+      bar.style.background = "#fff";
+      bar.style.opacity = "1";
+    }
+
+    // aktif bar animasyonlu
+    if (i === index) {
+      bar.classList.add("active");
+    }
+
+    progress.appendChild(bar);
+  });
+}
+
+function showStory(i){
+  clearTimeout(timer);
+
+  index = (i + images.length) % images.length;
+
+  img.src = images[index];
+  bg.style.backgroundImage = `url(${images[index]})`;
+
+  renderProgress();
+
+  timer = setTimeout(() => showStory(index + 1), 5000);
+}
+
+document.querySelector(".tap.right").onclick = () => showStory(index + 1);
+document.querySelector(".tap.left").onclick  = () => showStory(index - 1);
+
+// Başlat: otomatik algıla
+tryLoadOne(detectIndex);
+</script>
+
+</body>
+</html>
